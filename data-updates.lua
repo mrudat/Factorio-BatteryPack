@@ -401,8 +401,8 @@ function BatteryPack.find_engines_for_item_name(item_name)
           goto next_ingredient
         end
       else
-        name = ingredient[1]
-        amount = ingredient[2]
+        name = ingredient.name or ingredient[1]
+        amount = ingredient.amount or ingredient[2]
       end
       if not name then
         log("Error reading item name from ingredient: " .. serpent.line{ingredient});
