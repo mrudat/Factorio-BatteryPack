@@ -1,4 +1,11 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.6
+Date: 14. 04. 2019
+
+  Changes:
+    - Skip ingredients which do not have an ingredient.name?
+
+---------------------------------------------------------------------------------------------------
 Version: 0.0.5
 Date: 07. 04. 2019
 
@@ -14,7 +21,7 @@ Date: 06. 04. 2019
     - Now blacklists and replaces individual sounds (though there's no replacement sounds yet).
 
   Bugfixes:
-    - Should no longer produce battey-powered vehicles where the original vehicle doesn't run on burner fuel.
+    - Should no longer produce battery-powered vehicles where the original vehicle doesn't run on burner fuel.
     - Only creates charged battery packs where the original actually acts as a battery (tertiary power).
 
 ---------------------------------------------------------------------------------------------------
@@ -22,17 +29,17 @@ Version: 0.0.3
 Date: 31. 03. 2019
 
   Bugfixes:
-    - Doesn't fail when attempting to find the items that place the various component vehicles for the Helicoper mod.
+    - Doesn't fail when attempting to find the items that place the various component vehicles for the Helicopter mod.
 
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.2
 Date: 25. 03. 2019
 
   Changes:
-    - Attach battey-powered vehicle to the same technology as the original vehicle, rather than having it unlocked from the start.
-    
+    - Attach battery-powered vehicle to the same technology as the original vehicle, rather than having it unlocked from the start.
+
   Bugfixes:
-    - No longer attempts to charge vanishinly small battery-equipment, preventing generating an invalid recipe.
+    - No longer attempts to charge vanishingly small battery-equipment, preventing generating an invalid recipe.
 
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.1

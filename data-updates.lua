@@ -58,29 +58,29 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
 
   local old_battery_item = data.raw["item"][old_battery_item_name]
   if not old_battery_item then return end
-  
+
   -- this is alredy usable as fuel, don't touch this
   if old_battery_item.fuel_category then return end
 
   local energy_source = old_battery_equipment.energy_source
 
   if energy_source.usage_priority ~= "tertiary" then return end
-  
+
   local buffer_capacity = energy_source.buffer_capacity
   local joules_in_battery = BatteryPack.energy_to_joules(buffer_capacity)
   local time_to_fill_battery = joules_in_battery / BatteryPack.CHARGER_POWER
-  
+
   if time_to_fill_battery <= 0.001 then
     log("Not producing a fully charged version of the " .. old_battery_item_name)
     return
   end
-  
+
   local technology_list = BatteryPack.find_technologies_for_item(old_battery_item_name)
   local start_enabled = true
   if next(technology_list) then
     start_enabled = false
   end
-  
+
   local height = old_battery_equipment.shape.height
   local width = old_battery_equipment.shape.width
   local overlay_size = height .. "x" .. width
@@ -88,17 +88,17 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
   if BatteryPack.discharged_overlays[overlay_size] then
     discharged_overlay = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay-" .. overlay_size .. ".png"
   end
-  
+
   -- Start creating new things here.
-  
+
   local battery_equipment = table.deepcopy(old_battery_equipment)
   local battery_item = table.deepcopy(old_battery_item)
-  
+
   old_battery_equipment_name = old_battery_equipment.name
-  
+
   local battery_equipment_name = BatteryPack.PREFIX .. old_battery_equipment_name .. "-charged"
   local battery_item_name = BatteryPack.PREFIX .. old_battery_item.name .. "-charged"
-  
+
   battery_equipment.name = battery_equipment_name
   battery_equipment.localised_name = { -- doesn't seem to be used?
     BatteryPack.MOD_NAME .. ".charged",
@@ -106,7 +106,7 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
       "equipment-name." .. old_battery_equipment_name
     }
   }
-  
+
   battery_item.name = battery_item_name
   battery_item.localised_name = { -- but the original item doesn't have a localised name?
     BatteryPack.MOD_NAME .. ".charged",
@@ -123,7 +123,7 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
   battery_item.fuel_top_speed_multiplier = 1.15
   -- batteries are clean, we already paid for the pollution wherever the power was generated
   battery_item.fuel_emissions_multiplier = 0.0
-  
+
   -- make uncharged battery darker than charged battery
   BatteryPack.add_icons(
     old_battery_item,
@@ -135,7 +135,7 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
       }
     }
   )
-  
+
   local charge_recipe = {
     type = "recipe",
     name = battery_item_name,
@@ -160,11 +160,11 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
     allow_as_intermediate = false,
     allow_intermediates = false,
   }
-  
+
   BatteryPack.add_recipe_to_technologies(battery_item_name, technology_list)
-  
+
   -- TODO build charger/discharger to match battery?
-  
+
   table.insert(new_things, charge_recipe)
   table.insert(new_things, battery_equipment)
   table.insert(new_things, battery_item)
@@ -194,27 +194,27 @@ BatteryPack.vehicle_blacklist = {
 function BatteryPack.process_vehicle(old_vehicle, new_things)
   local old_item_name = BatteryPack.find_item_that_places_vehicle(old_vehicle)
   if not old_item_name then return end
-  
+
   local old_item = data.raw["item-with-entity-data"][old_item_name] or data.raw["item"][old_item_name]
   if not old_item then return end
-  
+
   local engines = BatteryPack.find_engines_for_item_name(old_item_name)
-  
+
   local old_vehicle_name = old_vehicle.name
-  
+
   if BatteryPack.vehicle_blacklist[old_vehicle_name] then return end
-  
+
   local technology_list = BatteryPack.find_technologies_for_item(old_item_name)
   local start_enabled = true
   if next(technology_list) then
     start_enabled = false
   end
-  
+
   local vehicle = table.deepcopy(old_vehicle)
   local item = table.deepcopy(old_item)
-  
+
   local electric_vehicle_name = BatteryPack.PREFIX .. old_vehicle.name
-  
+
   local recipe = {
     type = "recipe",
     name = electric_vehicle_name,
@@ -266,9 +266,9 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
       amount = 1,
     })
   end
-  
+
   local burner
-  
+
   if vehicle.burner then
     burner = vehicle.burner
   elseif vehicle.energy_source and vehicle.energy_source.type == "burner" then
@@ -276,21 +276,21 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
   else
     return
   end
-  
+
   -- TODO also read fuel_categories
   local fuel_category = burner.fuel_category
-  
+
   if fuel_category and fuel_category ~= 'chemical' then return end
-  
+
   local fuel_inventory_size = burner.fuel_inventory_size
-  
+
   if fuel_inventory_size == 0 then return end
-  
+
   burner.fuel_categories = nil
   burner.fuel_category = BatteryPack.fuel_category
   burner.burnt_inventory_size = fuel_inventory_size
   burner.smoke = nil
-  
+
   local working_sound = vehicle.working_sound
   if working_sound then
     BatteryPack.patch_sound(working_sound, 'activate_sound')
@@ -308,28 +308,28 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
       vehicle.sound_no_fuel = nil
     end
   end
-  
+
   local localised_name = {
     BatteryPack.MOD_NAME .. ".battery-powered",
     { "entity-name." .. old_vehicle_name }
   }
-  
+
   vehicle.name = electric_vehicle_name
   vehicle.localised_name = localised_name
-  
+
   local minable = vehicle.minable
   if minable then
     minable.results = nil
     minable.result = electric_vehicle_name
   end
-  
+
   item.name = electric_vehicle_name
   item.place_result = electric_vehicle_name
   item.localised_name = localised_name
-  
+
   -- TODO new technology that depends on one of technology_list and battey-equipment
   BatteryPack.add_recipe_to_technologies(electric_vehicle_name, technology_list)
-  
+
   table.insert(new_things, vehicle)
   table.insert(new_things, item)
   table.insert(new_things, recipe)
@@ -367,26 +367,26 @@ end
 function BatteryPack.find_engines_for_item_name(item_name)
   local item_names_seen = {}
   local recipe_queue = {}
-  
+
   local function register_recipes_for_item_name(item_name)
     if item_names_seen[item_name] then return end
-    
+
     item_names_seen[item_name] = true
-    
+
     local recipe_names = BatteryPack.find_recipes_for_thing(item_name)
 
     if not recipe_names then return end
-    
+
     for _, recipe_name in ipairs(recipe_names) do
       table.insert(recipe_queue, recipe_name)
     end
   end
 
   register_recipes_for_item_name(item_name)
-  
+
   local name
   local amount
-  
+
   for _,recipe_name in ipairs(recipe_queue) do
     local recipe = data.raw["recipe"][recipe_name]
     if recipe.normal then
@@ -404,30 +404,34 @@ function BatteryPack.find_engines_for_item_name(item_name)
         name = ingredient[1]
         amount = ingredient[2]
       end
-      
+      if not name then
+        log("Error reading item name from ingredient: " .. serpent.line{ingredient});
+        goto next_ingredient
+      end
+
       if name == "electric-engine-unit" then
         return {
           "electric-engine-unit", amount
         }
       end
-      
+
       if name == "engine-unit" then
         return {
           "engine-unit", amount
         }
       end
-      
+
       register_recipes_for_item_name(name)
       ::next_ingredient::
     end
   end
-  
+
   return {}
 end
 
 function BatteryPack.find_technologies_for_item(item_name)
   -- if no technologies found, we are enabled from the start
-  
+
   local original_recipes = BatteryPack.find_recipes_for_thing(item_name)
   local technology_list = {}
 
@@ -464,10 +468,10 @@ end
 
 do -- TODO reset this if we get called outside this module?
   local equipment_to_item_map = nil
-  
+
   function build_item_to_equipment_map()
     equipment_to_item_map = {}
-    
+
     for item_name, item in pairs(data.raw["item"]) do
       local equipment_name = item.placed_as_equipment_result
       if equipment_name then
@@ -475,22 +479,22 @@ do -- TODO reset this if we get called outside this module?
       end
     end
   end
-  
+
   function BatteryPack.find_item_that_places_equipment(equipment)
     if not equipment_to_item_map then
       build_item_to_equipment_map()
     end
-    
+
     return equipment_to_item_map[equipment.name]
   end
 end
 
 do -- TODO reset this if we get called outside this module?
   local vehicle_to_item_map = nil
-  
+
   function build_item_to_vehicle_map()
     vehicle_to_item_map = {}
-    
+
     for item_name, item in pairs(data.raw["item-with-entity-data"]) do
       local vehicle_name = item.place_result
       if vehicle_name then
@@ -505,18 +509,18 @@ do -- TODO reset this if we get called outside this module?
       end
     end
   end
-  
+
   function BatteryPack.find_item_that_places_vehicle(vehicle)
     if not vehicle_to_item_map then
       build_item_to_vehicle_map()
     end
-    
+
     local vehicle_name = vehicle.name
-    
+
     local candidate = vehicle_to_item_map[vehicle_name]
-    
+
     if candidate then return candidate end
-    
+
     return nil
   end
 end
