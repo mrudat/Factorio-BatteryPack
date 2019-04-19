@@ -17,6 +17,9 @@ BatteryPack.BATTERY_ROUND_TRIP_EFFICIENCY = 0.95 -- li-ion is around 95% efficie
 BatteryPack.fuel_category = BatteryPack.PREFIX .. "category"
 BatteryPack.charging_recipe_category = BatteryPack.PREFIX .. "charging"
 
+local intermediate_recipes = {}
+
+
 data:extend({
   {
     type = "recipe-category",
@@ -33,6 +36,10 @@ data:extend({
 local battery_holder_name = BatteryPack.PREFIX .. "battery-holder"
 local battery_holder_contact_name = BatteryPack.PREFIX .. "battery-holder-contact"
 local battery_holder_frame_name = BatteryPack.PREFIX .. "battery-holder-frame"
+
+table.insert(intermediate_recipes,battery_holder_name)
+table.insert(intermediate_recipes,battery_holder_contact_name)
+table.insert(intermediate_recipes,battery_holder_frame_name)
 
 data:extend({
   {
@@ -75,7 +82,7 @@ data:extend({
     enabled = false,
     show_amount_in_title = true,
   },
-  
+
   {
     type = "item",
     name = battery_holder_contact_name,
@@ -156,7 +163,7 @@ BatteryPack.building_template = {
       0.9
     }
   },
-  corpse = "medium-remnants", 
+  corpse = "medium-remnants",
   dying_explosion = "medium-explosion",
   drawing_box = {
     {
@@ -223,6 +230,7 @@ charger.crafting_categories = { BatteryPack.charging_recipe_category }
 charger.energy_source = {
   type = "electric",
   usage_priority = "tertiary",
+  output_flow_limit = "0.001W",
   drain = "0W"
 }
 charger.result_inventory_size = 1
@@ -287,7 +295,8 @@ discharger.name = discharger_name
 discharger.minable.result = discharger_name
 discharger.energy_source = {
   type = "electric",
-  usage_priority = "tertiary"
+  usage_priority = "tertiary",
+  input_flow_limit = "0.001W"
 }
 discharger.burner = {
   type = "burner",
@@ -387,6 +396,20 @@ data:extend{
   discharger_equipment,
   discharger_recipe
 }
+
+-- productivity modules
+
+for _, module in pairs(data.raw["module"]) do
+  local module_effect = module.effect
+  local productivity_effect = module_effect["productivity"]
+  if not productivity_effect then goto next_module end
+  local limitation = module.limitation
+  if not limitation then goto next_module end
+  for _,recipe_name in ipairs(intermediate_recipes) do
+    table.insert(limitation, recipe_name)
+  end
+  ::next_module::
+end
 
 -- recipe unlock
 
