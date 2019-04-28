@@ -216,6 +216,7 @@ BatteryPack.building_template = {
 local accumulator = data.raw["accumulator"]["accumulator"]
 
 local charger_name = BatteryPack.PREFIX .. "charger"
+local charger2_name = BatteryPack.PREFIX .. "charger2"
 local discharger_name = BatteryPack.PREFIX .. "discharger"
 
 local charger = table.deepcopy(BatteryPack.building_template)
@@ -243,17 +244,31 @@ charger.working_visualisations = {
   }
 }
 
+local charger2 = table.deepcopy(charger)
+charger2.name = charger2_name
+charger2.minable.result = charger2_name
+charger2.energy_source.usage_priority = "secondary-input"
+
 local charger_item = {
   type = "item",
   name = charger_name,
-  localised_name = charger.localised_name,
-  localised_description = charger.localised_description,
   icon = "__base__/graphics/icons/accumulator.png",
   icon_size = 32,
   place_result = charger_name,
   stack_size = 50,
   subgroup = "energy",
   order = "e[accumulator]-a[charger]"
+}
+
+local charger2_item = {
+  type = "item",
+  name = charger2_name,
+  icon = "__base__/graphics/icons/accumulator.png",
+  icon_size = 32,
+  place_result = charger2_name,
+  stack_size = 50,
+  subgroup = "energy",
+  order = "e[accumulator]-a[charger2]"
 }
 
 local charger_recipe = {
@@ -289,6 +304,38 @@ local charger_recipe = {
   enabled = false
 }
 
+local charger2_recipe = {
+  type = "recipe",
+  name = charger2_name,
+  icon = "__base__/graphics/icons/accumulator.png",
+  icon_size = 32,
+  ingredients = {
+    {
+      type = "item",
+      name = "iron-plate",
+      amount = 2
+    },
+    {
+      type = "item",
+      name = "electronic-circuit",
+      amount = 5
+    },
+    {
+      type = "item",
+      name = battery_holder_name,
+      amount = 1
+    }
+  },
+  results = {
+    {
+      type = "item",
+      name = charger2_name,
+      amount = 1
+    }
+  },
+  energy_required = 0.5,
+  enabled = false
+}
 
 discharger.type = "generator"
 discharger.name = discharger_name
@@ -300,7 +347,7 @@ discharger.energy_source = {
 }
 discharger.burner = {
   type = "burner",
-  emissions_per_second_per_watt = 0,
+  emissions_per_minute = 0,
   fuel_inventory_size = 1,
   burnt_inventory_size = 1,
   effectivity = 1,
@@ -391,6 +438,9 @@ data:extend{
   charger,
   charger_item,
   charger_recipe,
+  charger2,
+  charger2_item,
+  charger2_recipe,
   discharger,
   discharger_item,
   discharger_equipment,
@@ -434,6 +484,11 @@ table.insert(battery_equipment_technology_effects, {
 table.insert(battery_equipment_technology_effects, {
   type = "unlock-recipe",
   recipe = charger_name
+})
+
+table.insert(battery_equipment_technology_effects, {
+  type = "unlock-recipe",
+  recipe = charger2_name
 })
 
 table.insert(battery_equipment_technology_effects, {

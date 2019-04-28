@@ -1,4 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.8
+Date: 28. 04. 2019
+
+  Changes:
+    - Use emissions_per_minute instead of emissions_per_second_per_watt
+    - Add a battery charger that runs at secondary-input priority so as to not disable accumulators.
+
+---------------------------------------------------------------------------------------------------
 Version: 0.0.7
 Date: 19. 04. 2019
 
