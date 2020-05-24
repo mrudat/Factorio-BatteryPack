@@ -7,9 +7,7 @@ charger/discharger:
 <prefix>-discharger-<rate>
 
 -- vehicles
--- TODO duplicate any fuel-burning vehicle and adjust stats accordingly
--- TODO if pollution multiplier is set to 0 (rather than default 1, does it stop the burner from emitting pollution, and if so, can we merely edit something that uses electric-engine-unit to use our fuel directly?)
--- TODO swap out any engine for electric-engine-unit, ie. take existing vehicle and n electric-engine units, and return new vehicle + n engine.
+-- TODO build reverse recipies in case vanilla vehicle can be upgraded.
 
 -- TODO respect energy_source.input_flow_limit and output_flow_limit?
 -- would need a fuel_category for each value of output_flow_limit and a charging_recipe_category for each value of input_flow_limit
@@ -19,7 +17,7 @@ charger/discharger:
 
 -- Modules
 
-BatteryPack = {}
+-- BatteryPack = {}
 
 -- Constants
 
@@ -38,7 +36,6 @@ BatteryPack.charging_recipe_category = BatteryPack.PREFIX .. "charging"
 function BatteryPack.process_batteries()
   local new_things = {}
   for battery_name, battery in pairs(data.raw["battery-equipment"]) do
-    -- TODO if added by ModularChargePacks, don't touch?
     BatteryPack.process_battery(battery, new_things)
   end
   if next(new_things) then
@@ -51,10 +48,24 @@ BatteryPack.discharged_overlays = {
   ["1x1"] = true,
 }
 
+local function set_item_fuel_properties(item, fuel_value, burnt_result)
+  item.fuel_category = BatteryPack.fuel_category
+  item.burnt_result = burnt_result
+  item.fuel_value = fuel_value
+   -- TODO same as nuclear fuel, but perhaps could be better?
+  item.fuel_acceleration_multiplier = 2.5
+  item.fuel_top_speed_multiplier = 1.15
+  -- batteries are clean, we already paid for the pollution wherever the power was generated
+  item.fuel_emissions_multiplier = 0.0
+end
+
 function BatteryPack.process_battery(old_battery_equipment, new_things)
+  if BatteryPack.equipment_blacklist[old_battery_equipment.name] then return end
 
   local old_battery_item_name = BatteryPack.find_item_that_places_equipment(old_battery_equipment)
   if not old_battery_item_name then return end
+
+  if BatteryPack.item_blacklist[old_battery_item_name] then return end
 
   local old_battery_item = data.raw["item"][old_battery_item_name]
   if not old_battery_item then return end
@@ -72,6 +83,12 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
 
   if time_to_fill_battery <= 0.001 then
     log("Not producing a fully charged version of the " .. old_battery_item_name)
+    return
+  end
+
+  if (BatteryPack.primary_batteries[old_battery_item_name]) then
+    set_item_fuel_properties(old_battery_item, buffer_capacity, nil)
+    table.insert(new_things, old_battery_item)
     return
   end
 
@@ -115,14 +132,7 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
     }
   }
   battery_item.placed_as_equipment_result = battery_equipment_name
-  battery_item.fuel_category = BatteryPack.fuel_category
-  battery_item.burnt_result = old_battery_item_name
-  battery_item.fuel_value = buffer_capacity
-  -- TODO same as nuclear fuel, but perhaps could be better?
-  battery_item.fuel_acceleration_multiplier = 2.5
-  battery_item.fuel_top_speed_multiplier = 1.15
-  -- batteries are clean, we already paid for the pollution wherever the power was generated
-  battery_item.fuel_emissions_multiplier = 0.0
+  set_item_fuel_properties(battery_item, buffer_capacity, old_battery_item_name)
 
   -- make uncharged battery darker than charged battery
   BatteryPack.add_icons(
@@ -182,13 +192,6 @@ function BatteryPack.process_vehicles()
     data:extend(new_things)
   end
 end
-
-BatteryPack.vehicle_blacklist = {
-  -- these accept chemical fuel and have a non-zero fuel_inventory_size when we see them, but they're edited later
-  ["et-electric-locomotive-mk1"] = true,
-  ["et-electric-locomotive-mk2"] = true,
-  ["et-electric-locomotive-mk3"] = true,
-}
 
 -- TODO intermediate hybrid version?
 function BatteryPack.process_vehicle(old_vehicle, new_things)
@@ -293,11 +296,15 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
 
   local working_sound = vehicle.working_sound
   if working_sound then
-    BatteryPack.patch_sound(working_sound, 'activate_sound')
-    BatteryPack.patch_sound(working_sound, 'deactivate_sound')
-    BatteryPack.patch_sound(working_sound, 'sound')
-    if not (working_sound.sound or working_sound.activate_sound or working_sound.deactivate_sound) then
-      vehicle.working_sound = nil
+    if not (working_sound.sound) then
+      BatteryPack.patch_sound(vehicle, 'working_sound')
+    else
+      BatteryPack.patch_sound(working_sound, 'activate_sound')
+      BatteryPack.patch_sound(working_sound, 'deactivate_sound')
+      BatteryPack.patch_sound(working_sound, 'sound')
+      if not (working_sound.sound) then
+        vehicle.working_sound = nil
+      end
     end
   end
 
@@ -352,14 +359,20 @@ BatteryPack.sound_blacklist = {
 }
 
 function BatteryPack.patch_sound(sound, key)
-  if not sound[key] then return end
-  local filename = sound[key].filename
-  if BatteryPack.sound_replacement[filename] then
-    sound[key].filename = BatteryPack.sound_replacement[filename]
+  local thesound = sound[key]
+  if not thesound then return end
+  local volume = thesound.volume or 1
+  if volume == 0 then
+    sound[key] = nil
     return
   end
+  local filename = sound[key].filename
   if BatteryPack.sound_blacklist[filename] then
     sound[key] = nil
+    return
+  end
+  if BatteryPack.sound_replacement[filename] then
+    thesound.filename = BatteryPack.sound_replacement[filename]
     return
   end
 end

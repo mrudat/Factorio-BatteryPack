@@ -1,6 +1,8 @@
 -- Modules
 
-BatteryPack = {}
+if not BatteryPack then
+  BatteryPack = {}
+end
 
 -- Constants
 
@@ -16,6 +18,42 @@ BatteryPack.BATTERY_ROUND_TRIP_EFFICIENCY = 0.95 -- li-ion is around 95% efficie
 
 BatteryPack.fuel_category = BatteryPack.PREFIX .. "category"
 BatteryPack.charging_recipe_category = BatteryPack.PREFIX .. "charging"
+
+-- blacklists
+
+local blacklist_data = {
+  ["equipment_blacklist"] = {
+    -- Not actually a battery.
+    ["heli-remote-equipment"] = true
+  },
+  ["item_blacklist"] = {},
+  ["primary_batteries"] = {
+    -- SchallPrimaryBattery
+    ["primary-battery-equipment-alkaline"] = true,
+    ["primary-battery-equipment-dry"] = true
+  },
+  ["vehicle_blacklist"] = {
+    -- these accept chemical fuel and have a non-zero fuel_inventory_size when we see them, but they're edited later
+    ["et-electric-locomotive-mk1"] = true,
+    ["et-electric-locomotive-mk2"] = true,
+    ["et-electric-locomotive-mk3"] = true,
+    -- These are used internally by Cargo Ships.
+    ["cargo_ship_engine"] = true,
+    ["boat_engine"] = true,
+  }
+}
+
+for listName, listData in pairs(blacklist_data) do
+  local existingData = BatteryPack[listName]
+  if existingData then
+    for name in pairs(listData) do
+      existingData[name] = true
+    end
+  else
+    BatteryPack[listName] = listData
+  end
+end
+
 
 local intermediate_recipes = {}
 
@@ -148,75 +186,35 @@ data:extend({
 })
 
 
--- battery charger
-
-BatteryPack.building_template = {
-  type = nil,
-  name = nil,
-  collision_box = {
-    {
-      -0.9,
-      -0.9
-    },
-    {
-      0.9,
-      0.9
-    }
-  },
-  corpse = "medium-remnants",
-  dying_explosion = "medium-explosion",
-  drawing_box = {
-    {
-      -1,
-      -1.5,
-    },
-    {
-      1,
-      1
-    }
-  },
-  flags = {
-    "placeable-neutral",
-    "player-creation"
-  },
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
-  max_health = 150,
-  minable = {
-    mining_time = 0.1,
-    result = nil
-  },
-  selection_box = {
-    {
-      -1,
-      -1
-    },
-    {
-      1,
-      1
-    }
-  },
-  vehicle_impact_sound = {
-    filename = "__base__/sound/car-metal-impact.ogg",
-    volume = 0.65
-  },
-  working_sound = {
-    idle_sound = {
-      filename = "__base__/sound/accumulator-idle.ogg",
-      volume = 0.4
-    },
-    max_sounds_per_type = 5,
-    sound = {
-      filename = "__base__/sound/accumulator-working.ogg",
-      volume = 1
-    }
-  }
-}
-
 local accumulator = data.raw["accumulator"]["accumulator"]
 
+BatteryPack.building_template = table.deepcopy(accumulator)
+
+local remove_properties = {
+  "type",
+  "name",
+  "charge_animation",
+  "charge_cooldown",
+  "charge_light",
+  "discharge_animation",
+  "discharge_cooldown",
+  "discharge_light",
+  "circuit_wire_connection_point",
+  "circuit_wire_connector_sprites",
+  "circuit_wire_max_distance",
+  "default_output_signal"
+}
+
+for i, key in ipairs(remove_properties) do
+  BatteryPack.building_template[key] = nil
+end
+
+BatteryPack.minable = {
+  mining_time = 0.1,
+  result = nil
+}
+
 local charger_name = BatteryPack.PREFIX .. "charger"
-local charger2_name = BatteryPack.PREFIX .. "charger2"
 local discharger_name = BatteryPack.PREFIX .. "discharger"
 
 local charger = table.deepcopy(BatteryPack.building_template)
@@ -244,38 +242,22 @@ charger.working_visualisations = {
   }
 }
 
-local charger2 = table.deepcopy(charger)
-charger2.name = charger2_name
-charger2.minable.result = charger2_name
-charger2.energy_source.usage_priority = "secondary-input"
-
 local charger_item = {
   type = "item",
   name = charger_name,
   icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
+  icon_size = 64, icon_mipmaps = 4,
   place_result = charger_name,
   stack_size = 50,
   subgroup = "energy",
   order = "e[accumulator]-a[charger]"
 }
 
-local charger2_item = {
-  type = "item",
-  name = charger2_name,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
-  place_result = charger2_name,
-  stack_size = 50,
-  subgroup = "energy",
-  order = "e[accumulator]-a[charger2]"
-}
-
 local charger_recipe = {
   type = "recipe",
   name = charger_name,
   icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
+  icon_size = 64, icon_mipmaps = 4,
   ingredients = {
     {
       type = "item",
@@ -304,46 +286,13 @@ local charger_recipe = {
   enabled = false
 }
 
-local charger2_recipe = {
-  type = "recipe",
-  name = charger2_name,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
-  ingredients = {
-    {
-      type = "item",
-      name = "iron-plate",
-      amount = 2
-    },
-    {
-      type = "item",
-      name = "electronic-circuit",
-      amount = 5
-    },
-    {
-      type = "item",
-      name = battery_holder_name,
-      amount = 1
-    }
-  },
-  results = {
-    {
-      type = "item",
-      name = charger2_name,
-      amount = 1
-    }
-  },
-  energy_required = 0.5,
-  enabled = false
-}
-
-discharger.type = "generator"
+discharger.type = "burner-generator"
 discharger.name = discharger_name
 discharger.minable.result = discharger_name
 discharger.energy_source = {
   type = "electric",
   usage_priority = "tertiary",
-  input_flow_limit = "0.001W"
+  input_flow_limit = "0W"
 }
 discharger.burner = {
   type = "burner",
@@ -353,8 +302,8 @@ discharger.burner = {
   effectivity = 1,
   fuel_category = BatteryPack.fuel_category,
 }
-discharger.horizontal_animation = accumulator.picture
-discharger.vertical_animation = accumulator.picture
+discharger.animation = accumulator.discharge_animation
+discharger.idle_animation = accumulator_picture({ r=1, g=1, b=1, a=1 } , 24)
 discharger.effectivity = 1
 discharger.max_power_output = "200MW"
 
@@ -363,8 +312,8 @@ local discharger_equipment = {
   name = discharger_name,
   sprite = {
     filename = "__base__/graphics/icons/accumulator.png",
-    height = 32,
-    width = 32,
+    height = 64,
+    width = 64,
     priority = "medium"
   },
   shape = {
@@ -393,7 +342,7 @@ local discharger_item = {
   localised_name = discharger.localised_name,
   localised_description = discharger.localised_description,
   icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
+  icon_size = 64, icon_mipmaps = 4,
   place_result = discharger_name,
   placed_as_equipment_result = discharger_name,
   stack_size = 50,
@@ -405,7 +354,7 @@ local discharger_recipe = {
   type = "recipe",
   name = discharger_name,
   icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 32,
+  icon_size = 64, icon_mipmaps = 4,
   ingredients = {
     {
       type = "item",
@@ -438,9 +387,6 @@ data:extend{
   charger,
   charger_item,
   charger_recipe,
-  charger2,
-  charger2_item,
-  charger2_recipe,
   discharger,
   discharger_item,
   discharger_equipment,
@@ -484,11 +430,6 @@ table.insert(battery_equipment_technology_effects, {
 table.insert(battery_equipment_technology_effects, {
   type = "unlock-recipe",
   recipe = charger_name
-})
-
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = charger2_name
 })
 
 table.insert(battery_equipment_technology_effects, {

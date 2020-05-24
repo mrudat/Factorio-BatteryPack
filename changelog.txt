@@ -1,4 +1,17 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.9
+Date: 24. 05. 2020
+
+  Changes:
+    - Updated for Factorio v0.18
+    - Removed the secondary-input battery charger, as it is no longer necessary.
+
+  Bugfixes:
+    - No longer creates battery-powered boat/ship engines from the Cargo ships mod.
+    - No longer creates a charged helicoper remote control.
+    - No longer allows recharging the batteries from SchallPrimaryBattery
+
+---------------------------------------------------------------------------------------------------
 Version: 0.0.8
 Date: 28. 04. 2019
 

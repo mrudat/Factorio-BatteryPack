@@ -1,0 +1,16 @@
+{
+  "entity": [
+    ["BatteryPack-boat_engine", "boat_engine"],
+    ["BatteryPack-cargo_ship_engine", "cargo_ship_engine"],
+    ["BatteryPack-charger2", "BatteryPack-charger"]
+  ],
+  "item": [
+    ["BatteryPack-charger2", "BatteryPack-charger"],
+    ["BatteryPack-heli-remote-equipment-charged", "heli-remote-equipment"],
+    ["BatteryPack-primary-battery-equipment-alkaline-charged", "primary-battery-equipment-alkaline"],
+    ["BatteryPack-primary-battery-equipment-dry-charged", "primary-battery-equipment-dry"]
+  ],
+  "recipe": [
+    ["BatteryPack-charger2", "BatteryPack-charger"]
+  ]
+}
