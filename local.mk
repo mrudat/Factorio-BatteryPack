@@ -1,5 +1,5 @@
-LUAC := luac52
-LUACHECK := true
-ZIP := 7z a -r
+LUAC := luac5.2
 
-FACTORIO_MODS := "/c/Users/Martin Rudat/AppData/Roaming/Factorio/mods"
+FACTORIO_MODS := "/mnt/c/Users/Martin Rudat/AppData/Roaming/Factorio/mods"
+
+POVRAY_OPTIONS := +L/usr/share/povray-3.7/include

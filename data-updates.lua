@@ -1,3 +1,10 @@
+local ORNodes = require('__OR-Nodes__/library.lua').init()
+local rusty_locale = require('__rusty-locale__/locale')
+local rusty_icons = require('__rusty-locale__/icons')
+
+local locale_of = rusty_locale.of
+local icons_of = rusty_icons.of
+
 --[[ NOTES:
 names of things:
 fuel-item: <prefix>-<battery>-charged
@@ -7,84 +14,59 @@ charger/discharger:
 <prefix>-discharger-<rate>
 
 -- vehicles
--- TODO build reverse recipies in case vanilla vehicle can be upgraded.
-
 -- TODO respect energy_source.input_flow_limit and output_flow_limit?
 -- would need a fuel_category for each value of output_flow_limit and a charging_recipe_category for each value of input_flow_limit
 -- perhaps not necessary; the smallest battery allows 200MW, which is way more than any vehicle we're likely to run into.
 
 ]]
 
--- Modules
-
--- BatteryPack = {}
-
--- Constants
-
-BatteryPack.MOD_NAME = "BatteryPack"
-BatteryPack.PREFIX = BatteryPack.MOD_NAME .. "-"
-BatteryPack.MOD_DIRECTORY = "__" .. BatteryPack.MOD_NAME .. "__/"
-BatteryPack.GRAPHICS_DIRECTORY = BatteryPack.MOD_DIRECTORY .. "graphics/"
-
 -- other values we're going to be using later
 
-BatteryPack.CHARGER_POWER = 200 * 1000 * 1000 -- 200MW (max power battery-equipment)
-
-BatteryPack.fuel_category = BatteryPack.PREFIX .. "category"
-BatteryPack.charging_recipe_category = BatteryPack.PREFIX .. "charging"
+local battery_icons = icons_of(data.raw.item.battery)
 
 function BatteryPack.process_batteries()
   local new_things = {}
-  for battery_name, battery in pairs(data.raw["battery-equipment"]) do
-    BatteryPack.process_battery(battery, new_things)
+  local processed_items = {}
+  for _, battery in pairs(data.raw["battery-equipment"]) do
+    BatteryPack.process_battery(battery, new_things, processed_items)
   end
   if next(new_things) then
     data:extend(new_things)
   end
+  local battery_charger_prerequisite = ORNodes.depend_on_items(processed_items)[1]
+  if battery_charger_prerequisite then
+    local battery_charger_prerequisites = data.raw.technology[BatteryPack.battery_charger_technology].prerequisites
+    battery_charger_prerequisites[#battery_charger_prerequisites + 1] = battery_charger_prerequisite
+    local battery_power_plant_prerequisites = data.raw.technology[BatteryPack.battery_power_plant].prerequisites
+    battery_power_plant_prerequisites[#battery_power_plant_prerequisites + 1] = battery_charger_prerequisite
+  end
 end
-
-BatteryPack.discharged_overlays = {
-  ["2x1"] = true,
-  ["1x1"] = true,
-}
 
 local function set_item_fuel_properties(item, fuel_value, burnt_result)
   item.fuel_category = BatteryPack.fuel_category
   item.burnt_result = burnt_result
   item.fuel_value = fuel_value
-   -- TODO same as nuclear fuel, but perhaps could be better?
+  -- TODO same as nuclear fuel, but perhaps could be better?
   item.fuel_acceleration_multiplier = 2.5
   item.fuel_top_speed_multiplier = 1.15
   -- batteries are clean, we already paid for the pollution wherever the power was generated
   item.fuel_emissions_multiplier = 0.0
 end
 
-function BatteryPack.process_battery(old_battery_equipment, new_things)
+function BatteryPack.process_battery(old_battery_equipment, new_things, processed_items)
   if BatteryPack.equipment_blacklist[old_battery_equipment.name] then return end
 
-  local old_battery_item_name = BatteryPack.find_item_that_places_equipment(old_battery_equipment)
-  if not old_battery_item_name then return end
-
-  if BatteryPack.item_blacklist[old_battery_item_name] then return end
-
-  local old_battery_item = data.raw["item"][old_battery_item_name]
+  local old_battery_item = BatteryPack.find_item_that_places_equipment(old_battery_equipment)
   if not old_battery_item then return end
+
+  local old_battery_item_name = old_battery_item.name
+  if BatteryPack.item_blacklist[old_battery_item_name] then return end
 
   -- this is alredy usable as fuel, don't touch this
   if old_battery_item.fuel_category then return end
 
   local energy_source = old_battery_equipment.energy_source
-
-  if energy_source.usage_priority ~= "tertiary" then return end
-
   local buffer_capacity = energy_source.buffer_capacity
-  local joules_in_battery = BatteryPack.energy_to_joules(buffer_capacity)
-  local time_to_fill_battery = joules_in_battery / BatteryPack.CHARGER_POWER
-
-  if time_to_fill_battery <= 0.001 then
-    log("Not producing a fully charged version of the " .. old_battery_item_name)
-    return
-  end
 
   if (BatteryPack.primary_batteries[old_battery_item_name]) then
     set_item_fuel_properties(old_battery_item, buffer_capacity, nil)
@@ -92,18 +74,21 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
     return
   end
 
-  local technology_list = BatteryPack.find_technologies_for_item(old_battery_item_name)
-  local start_enabled = true
-  if next(technology_list) then
-    start_enabled = false
+  if energy_source.usage_priority ~= "tertiary" then return end
+
+  local joules_in_battery = util.parse_energy(buffer_capacity)
+  local time_to_fill_battery = joules_in_battery / BatteryPack.CHARGER_POWER
+
+  if time_to_fill_battery <= 0.001 then
+    log("Not producing a fully charged version of the " .. old_battery_item_name)
+    return
   end
 
-  local height = old_battery_equipment.shape.height
-  local width = old_battery_equipment.shape.width
-  local overlay_size = height .. "x" .. width
-  local discharged_overlay = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay.png"
-  if BatteryPack.discharged_overlays[overlay_size] then
-    discharged_overlay = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay-" .. overlay_size .. ".png"
+  local technology_list = ORNodes.depend_on_item(old_battery_item.name, old_battery_item.type, true)
+  if not technology_list then return end
+  local start_enabled = true
+  if technology_list[1] then
+    start_enabled = false
   end
 
   -- Start creating new things here.
@@ -111,40 +96,44 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
   local battery_equipment = table.deepcopy(old_battery_equipment)
   local battery_item = table.deepcopy(old_battery_item)
 
-  old_battery_equipment_name = old_battery_equipment.name
+  local old_battery_equipment_name = old_battery_equipment.name
 
   local battery_equipment_name = BatteryPack.PREFIX .. old_battery_equipment_name .. "-charged"
   local battery_item_name = BatteryPack.PREFIX .. old_battery_item.name .. "-charged"
 
+  local old_battery_localised_name = locale_of(old_battery_item).name
+
   battery_equipment.name = battery_equipment_name
   battery_equipment.localised_name = { -- doesn't seem to be used?
     BatteryPack.MOD_NAME .. ".charged",
-    {
-      "equipment-name." .. old_battery_equipment_name
-    }
+    old_battery_localised_name
   }
 
   battery_item.name = battery_item_name
   battery_item.localised_name = { -- but the original item doesn't have a localised name?
     BatteryPack.MOD_NAME .. ".charged",
-    {
-      "equipment-name." .. old_battery_equipment_name
-    }
+    old_battery_localised_name
   }
   battery_item.placed_as_equipment_result = battery_equipment_name
   set_item_fuel_properties(battery_item, buffer_capacity, old_battery_item_name)
 
   -- make uncharged battery darker than charged battery
-  BatteryPack.add_icons(
-    old_battery_item,
-    {
-      {
-        icon = discharged_overlay,
-        tint = { r=0, g=0, b=0, a=0.6 },
-        icon_size = 32
-      }
-    }
-  )
+  local discharged_icons = BatteryPack.discharged_icons
+  discharged_icons = discharged_icons[old_battery_equipment_name]
+  if not discharged_icons then
+    local discharged_overlays = BatteryPack.discharged_overlays
+    local discharged_overlay = discharged_overlays[old_battery_equipment_name]
+    if not discharged_overlay then
+      local shape = old_battery_equipment.shape
+      discharged_overlay = discharged_overlays[shape.height .. "x" .. shape.width]
+      if not discharged_overlay then
+        discharged_overlay = discharged_overlays['default']
+      end
+    end
+
+    discharged_icons = util.combine_icons(icons_of(old_battery_item), discharged_overlay, {})
+  end
+  old_battery_item.icons = discharged_icons
 
   local charge_recipe = {
     type = "recipe",
@@ -171,9 +160,16 @@ function BatteryPack.process_battery(old_battery_equipment, new_things)
     allow_intermediates = false,
   }
 
-  BatteryPack.add_recipe_to_technologies(battery_item_name, technology_list)
+  if not start_enabled then
+    table.insert(
+      data.raw.technology[technology_list[1]].effects,
+      { type = "unlock-recipe", recipe = battery_item_name }
+    )
+  end
 
   -- TODO build charger/discharger to match battery?
+
+  processed_items[#processed_items+1] = old_battery_item
 
   table.insert(new_things, charge_recipe)
   table.insert(new_things, battery_equipment)
@@ -182,24 +178,30 @@ end
 
 function BatteryPack.process_vehicles()
   local new_things = {}
+  local processed_items = {}
   for _,car in pairs(data.raw["car"]) do
-    BatteryPack.process_vehicle(car, new_things)
+    BatteryPack.process_vehicle(car, new_things, processed_items)
   end
   for _,locomotive in pairs(data.raw["locomotive"]) do
-    BatteryPack.process_vehicle(locomotive, new_things)
+    BatteryPack.process_vehicle(locomotive, new_things, processed_items)
   end
   if next(new_things) then
     data:extend(new_things)
   end
+  local electric_vehicle_prerequisite = ORNodes.depend_on_items(processed_items)[1]
+  if electric_vehicle_prerequisite then
+    local electric_vehicle_prerequisites = data.raw.technology[BatteryPack.electric_vehicle_technology].prerequisites
+    electric_vehicle_prerequisites[#electric_vehicle_prerequisites + 1] = electric_vehicle_prerequisite
+  end
 end
 
 -- TODO intermediate hybrid version?
-function BatteryPack.process_vehicle(old_vehicle, new_things)
-  local old_item_name = BatteryPack.find_item_that_places_vehicle(old_vehicle)
-  if not old_item_name then return end
-
-  local old_item = data.raw["item-with-entity-data"][old_item_name] or data.raw["item"][old_item_name]
+function BatteryPack.process_vehicle(old_vehicle, new_things, processed_items)
+  local old_item = BatteryPack.find_item_that_places_vehicle(old_vehicle)
   if not old_item then return end
+
+  local old_item_name = old_item.name
+  if not old_item_name then return end
 
   local engines = BatteryPack.find_engines_for_item_name(old_item_name)
 
@@ -207,11 +209,37 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
 
   if BatteryPack.vehicle_blacklist[old_vehicle_name] then return end
 
-  local technology_list = BatteryPack.find_technologies_for_item(old_item_name)
-  local start_enabled = true
-  if next(technology_list) then
-    start_enabled = false
+  local parent_tech = ORNodes.depend_on_item(old_item.name, old_item.type, true)
+  if not parent_tech then return end
+
+  local burner = old_vehicle.burner
+
+  if not burner then
+    burner = old_vehicle.energy_source
+    if not burner then return end
+    if burner.type ~= "burner" then return end
   end
+
+  local fuel_inventory_size = burner.fuel_inventory_size
+  if fuel_inventory_size == 0 then return end
+
+  local fuel_category = burner.fuel_category
+  if fuel_category then
+    if fuel_category ~= 'chemical' then return end
+  else
+    local fuel_categories = burner.fuel_categories
+    local has_chemical = false
+    for _, fuel_category in pairs(fuel_categories) do -- luacheck: ignore
+      if fuel_category == BatteryPack.fuel_category then return end
+      if fuel_category == 'chemical' then
+        has_chemical = true
+      end
+    end
+    if not has_chemical then return end
+  end
+
+  ---------------------------------------------------------------
+  -- Start creating new things here.
 
   local vehicle = table.deepcopy(old_vehicle)
   local item = table.deepcopy(old_item)
@@ -246,7 +274,20 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
         amount = 1
       },
     },
-    enabled = start_enabled
+    enabled = false,
+    allow_decomposition = false
+  }
+
+  local reverse_recipe_name = electric_vehicle_name .. '-reverse'
+
+  local reverse_recipe = {
+    type = "recipe",
+    name = reverse_recipe_name,
+    main_product = old_item_name,
+    ingredients = recipe.results,
+    results = recipe.ingredients,
+    enabled = false,
+    allow_decomposition = false
   }
 
   if engines[1] then
@@ -270,35 +311,23 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
     })
   end
 
-  local burner
-
-  if vehicle.burner then
-    burner = vehicle.burner
-  elseif vehicle.energy_source and vehicle.energy_source.type == "burner" then
-    burner = vehicle.energy_source
-  else
-    return
-  end
-
-  -- TODO also read fuel_categories
-  local fuel_category = burner.fuel_category
-
-  if fuel_category and fuel_category ~= 'chemical' then return end
-
-  local fuel_inventory_size = burner.fuel_inventory_size
-
-  if fuel_inventory_size == 0 then return end
+  burner = vehicle.burner or vehicle.energy_source
 
   burner.fuel_categories = nil
   burner.fuel_category = BatteryPack.fuel_category
   burner.burnt_inventory_size = fuel_inventory_size
   burner.smoke = nil
 
+  --vehicle.sound_minimum_speed = 0.25
+  --vehicle.sound_scaling_ratio = 1.0
+
   local working_sound = vehicle.working_sound
   if working_sound then
     if not (working_sound.sound) then
       BatteryPack.patch_sound(vehicle, 'working_sound')
     else
+      working_sound.match_volume_to_activity = true
+      working_sound.match_speed_to_activity = true
       BatteryPack.patch_sound(working_sound, 'activate_sound')
       BatteryPack.patch_sound(working_sound, 'deactivate_sound')
       BatteryPack.patch_sound(working_sound, 'sound')
@@ -318,7 +347,7 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
 
   local localised_name = {
     BatteryPack.MOD_NAME .. ".battery-powered",
-    { "entity-name." .. old_vehicle_name }
+    locale_of(old_vehicle).name
   }
 
   vehicle.name = electric_vehicle_name
@@ -334,29 +363,66 @@ function BatteryPack.process_vehicle(old_vehicle, new_things)
   item.place_result = electric_vehicle_name
   item.localised_name = localised_name
 
-  -- TODO new technology that depends on one of technology_list and battey-equipment
-  BatteryPack.add_recipe_to_technologies(electric_vehicle_name, technology_list)
+  local icons = {}
+  icons = util.combine_icons(
+    icons,
+    icons_of(item),
+    {
+      scale = 0.75,
+      shift = {3, 3}
+    }
+  )
+  icons = util.combine_icons(
+    icons,
+    battery_icons,
+    {
+      scale = 0.5,
+      shift = {-8, -8}
+    }
+  )
+  item.icons = icons
 
+  local item_order = item.order
+  item.order = item_order .. "2"
+  reverse_recipe.order = item_order .. "3"
+
+  local technology = {
+    type = "technology",
+    name = electric_vehicle_name,
+    localised_name = localised_name,
+    icons = icons,
+    unit = {
+      count = 10,
+      ingredients = {
+        {"automation-science-pack", 1},
+        {"logistic-science-pack", 1},
+      },
+      time = 15
+    },
+    effects = {
+      { type = "unlock-recipe", recipe = electric_vehicle_name },
+      { type = "unlock-recipe", recipe = reverse_recipe_name }
+    },
+    prerequisites = {
+      BatteryPack.electric_vehicle_technology
+    }
+  }
+
+  local prerequisites = technology.prerequisites
+
+  local technology_name = parent_tech[1]
+  if technology_name then
+    table.insert(prerequisites, technology_name)
+  end
+
+  processed_items[#processed_items+1] = old_item
+
+  table.insert(new_things, technology)
   table.insert(new_things, vehicle)
   table.insert(new_things, item)
   table.insert(new_things, recipe)
+  table.insert(new_things, reverse_recipe)
 end
-
-BatteryPack.sound_replacement = {
-  -- TODO ["__base__/sound/train-engine.ogg"] = "__BatteryPack__/sound/train-engine-no-rumble.ogg",
-}
-
-BatteryPack.sound_blacklist = {
-  ["__base__/sound/car-engine-start.ogg"] = true,
-  ["__base__/sound/car-engine-stop.ogg"] = true,
-  ["__base__/sound/car-engine.ogg"] = true,
-  ["__base__/sound/fight/car-no-fuel-1.ogg"] = true,
-  ["__base__/sound/fight/tank-engine-start.ogg"] = true,
-  ["__base__/sound/fight/tank-engine-stop.ogg"] = true,
-  ["__base__/sound/fight/tank-engine.ogg"] = true,
-  ["__base__/sound/fight/tank-no-fuel-1.ogg"] = true,
-  ["__base__/sound/train-engine.ogg"] = true
-}
 
 function BatteryPack.patch_sound(sound, key)
   local thesound = sound[key]
@@ -371,8 +437,14 @@ function BatteryPack.patch_sound(sound, key)
     sound[key] = nil
     return
   end
-  if BatteryPack.sound_replacement[filename] then
-    thesound.filename = BatteryPack.sound_replacement[filename]
+  local replacement_sound = BatteryPack.sound_replacement[filename]
+  if replacement_sound then
+    if type(replacement_sound) == 'table' then
+      thesound.filename = replacement_sound.filename
+      thesound.volume = replacement_sound.volume
+    else
+      thesound.filename = replacement_sound
+    end
     return
   end
 end
@@ -381,7 +453,7 @@ function BatteryPack.find_engines_for_item_name(item_name)
   local item_names_seen = {}
   local recipe_queue = {}
 
-  local function register_recipes_for_item_name(item_name)
+  local function register_recipes()
     if item_names_seen[item_name] then return end
 
     item_names_seen[item_name] = true
@@ -395,7 +467,7 @@ function BatteryPack.find_engines_for_item_name(item_name)
     end
   end
 
-  register_recipes_for_item_name(item_name)
+  register_recipes()
 
   local name
   local amount
@@ -434,7 +506,7 @@ function BatteryPack.find_engines_for_item_name(item_name)
         }
       end
 
-      register_recipes_for_item_name(name)
+      register_recipes(name)
       ::next_ingredient::
     end
   end
@@ -442,53 +514,16 @@ function BatteryPack.find_engines_for_item_name(item_name)
   return {}
 end
 
-function BatteryPack.find_technologies_for_item(item_name)
-  -- if no technologies found, we are enabled from the start
-
-  local original_recipes = BatteryPack.find_recipes_for_thing(item_name)
-  local technology_list = {}
-
-  if original_recipes then
-    local technology_set = {}
-    for _,recipe_name in ipairs(original_recipes) do
-      local technologies = BatteryPack.find_technologies_for_recipe(recipe_name)
-      if technologies then
-        for _,technology_name in ipairs(technologies) do
-          technology_set[technology_name] = 1
-        end
-      end
-      local recipe = data.raw["recipe"][recipe_name]
-      if recipe.enabled then
-        -- at least one recipe is enabled from the start, so we should be too
-        return {}
-      end
-    end
-    for technology_name,_ in pairs(technology_set) do
-      technology_list[#technology_list + 1] = technology_name
-    end
-    if not next(technology_list) then
-      return {}
-    end
-  else
-    -- TODO no recipe to build original item, yet it is otherwise valid, abort?
-    return {}
-  end
-  ::stop_looking_for_technologies::
-
-  return technology_list
-end
-
-
 do -- TODO reset this if we get called outside this module?
   local equipment_to_item_map = nil
 
-  function build_item_to_equipment_map()
+  local function build_item_to_equipment_map()
     equipment_to_item_map = {}
 
-    for item_name, item in pairs(data.raw["item"]) do
+    for _, item in pairs(data.raw["item"]) do
       local equipment_name = item.placed_as_equipment_result
       if equipment_name then
-        equipment_to_item_map[equipment_name] = item_name
+        equipment_to_item_map[equipment_name] = item
       end
     end
   end
@@ -505,20 +540,20 @@ end
 do -- TODO reset this if we get called outside this module?
   local vehicle_to_item_map = nil
 
-  function build_item_to_vehicle_map()
+  local function build_item_to_vehicle_map()
     vehicle_to_item_map = {}
 
-    for item_name, item in pairs(data.raw["item-with-entity-data"]) do
+    for _, item in pairs(data.raw["item-with-entity-data"]) do
       local vehicle_name = item.place_result
       if vehicle_name then
-        vehicle_to_item_map[vehicle_name] = item_name
+        vehicle_to_item_map[vehicle_name] = item
       end
     end
 
-    for item_name, item in pairs(data.raw["item"]) do
+    for _, item in pairs(data.raw["item"]) do
       local vehicle_name = item.place_result
       if vehicle_name then
-        vehicle_to_item_map[vehicle_name] = item_name
+        vehicle_to_item_map[vehicle_name] = item
       end
     end
   end
@@ -528,40 +563,7 @@ do -- TODO reset this if we get called outside this module?
       build_item_to_vehicle_map()
     end
 
-    local vehicle_name = vehicle.name
-
-    local candidate = vehicle_to_item_map[vehicle_name]
-
-    if candidate then return candidate end
-
-    return nil
-  end
-end
-
-do
-  local recipe_to_technology
-
-  local function build_recipe_to_technology_map()
-    recipe_to_technology = {}
-    for technology_name,technology in pairs(data.raw["technology"]) do
-      if not technology.effects then goto next_technology end
-      for i,effect in ipairs(technology.effects) do
-        if effect.type == "unlock-recipe" then
-          if not recipe_to_technology[effect.recipe] then
-            recipe_to_technology[effect.recipe] = {}
-          end
-          table.insert(recipe_to_technology[effect.recipe], technology_name)
-        end
-      end
-      ::next_technology::
-    end
-  end
-
-  function BatteryPack.find_technologies_for_recipe(recipe_name)
-    if not recipe_to_technology then
-      build_recipe_to_technology_map()
-    end
-    return recipe_to_technology[recipe_name]
+    return vehicle_to_item_map[vehicle.name]
   end
 end
 
@@ -585,7 +587,7 @@ do
       if recipe.result then
         register_result(recipe_name, recipe.result)
       elseif recipe.results then
-        for i,result in ipairs(recipe.results) do
+        for _,result in ipairs(recipe.results) do
           if result.name then
             register_result(recipe_name, result.name)
           else
@@ -593,7 +595,6 @@ do
           end
         end
       end
-      ::next_recipe::
     end
   end
 
@@ -602,70 +603,6 @@ do
       build_thing_to_recipe_map()
     end
     return thing_to_recipe[thing_name]
-  end
-end
-
-function BatteryPack.add_recipe_to_technologies(recipe_name, technology_list)
-  if not technology_list then return end
-  for i,technology in ipairs(technology_list) do
-    table.insert(
-      data.raw.technology[technology].effects,
-      { type = "unlock-recipe", recipe = recipe_name }
-    )
-  end
-end
-
--- https://wiki.factorio.com/Types/Energy
-function BatteryPack.energy_to_joules(energy)
-  if not energy then
-    error(debug.traceback())
-  end
-  energy = energy:upper()
-  energy = energy:gsub("W", "J")
-  local e = energy:gsub("%u", "")
-  if energy:find("YJ") then
-    return e * 1000^8
-  elseif energy:find("ZJ") then
-    return e * 1000^7
-  elseif energy:find("EJ") then
-    return e * 1000^6
-  elseif energy:find("PJ") then
-    return e * 1000^5
-  elseif energy:find("TJ") then
-    return e * 1000^4
-  elseif energy:find("GJ") then
-    return e * 1000^3
-  elseif energy:find("MJ") then
-    return e * 1000^2
-  elseif energy:find("KJ") then
-    return e * 1000^1
-  elseif energy:find("J") then
-    return e * 1000^0
-  else
-    return e * 1000^0
-  end
-end
-
--- https://wiki.factorio.com/Types/Energy
-function BatteryPack.joules_to_energy(energy, suffix)
-  local prefix = {"", "k", "M", "G", "T", "P", "E", "Z", "Y"}
-  local index = 1
-  while energy > 1000 do
-    energy = energy / 1000
-    index = index + 1
-  end
-  return energy .. prefix[index] .. (suffix or "W")
-end
-
-function BatteryPack.add_icons(item, icons)
-  if item.icon then
-    item.icons = {
-      { icon = item.icon }
-    }
-    item.icon = nil
-  end
-  for i,v in ipairs(icons) do
-    item.icons[#item.icons + 1] = v
   end
 end
 

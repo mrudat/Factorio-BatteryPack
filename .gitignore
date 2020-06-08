@@ -1,5 +1,12 @@
 # makefile with local settings
 local.mk
 
+# dependency information
+info.mk
+imagedep.mk
+
 # build directory
 build/
+
+*.code-workspace
+*.bak

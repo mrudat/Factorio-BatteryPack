@@ -1,12 +1,14 @@
 {
     "name": "BatteryPack",
     "author": "Martin Rudat",
-    "version": "0.0.9",
+    "version": "0.0.10",
     "factorio_version": "0.18",
     "title": "Battery Pack",
     "homepage": "",
     "description": "Changes modular armor batteries to work as removable battery packs able to power armor, vehicles or your factory.",
     "dependencies": [
-        "base >= 0.18.0"
+        "base >= 0.18.0",
+        "OR-Nodes >= 0.0.1",
+		"rusty-locale >= 0.0.1"
     ]
 }

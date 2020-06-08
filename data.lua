@@ -1,8 +1,13 @@
+local ORNodes = require('__OR-Nodes__/library.lua').init()
+local rusty_icons = require('__rusty-locale__/icons')
+
+local icons_of = rusty_icons.of
+
 -- Modules
 
-if not BatteryPack then
-  BatteryPack = {}
-end
+BatteryPack = {}
+
+-- TODO better graphics.
 
 -- Constants
 
@@ -13,50 +18,107 @@ BatteryPack.GRAPHICS_DIRECTORY = BatteryPack.MOD_DIRECTORY .. "graphics/"
 
 -- other values we're going to be using later
 
-BatteryPack.CHARGER_POWER = 1000000 -- 1MW
 BatteryPack.BATTERY_ROUND_TRIP_EFFICIENCY = 0.95 -- li-ion is around 95% efficient
 
 BatteryPack.fuel_category = BatteryPack.PREFIX .. "category"
 BatteryPack.charging_recipe_category = BatteryPack.PREFIX .. "charging"
 
--- blacklists
+BatteryPack.discharged_icons = {
+  -- ["battery_equipment_name"] = { icons }
+}
 
-local blacklist_data = {
-  ["equipment_blacklist"] = {
-    -- Not actually a battery.
-    ["heli-remote-equipment"] = true
+BatteryPack.discharged_overlays = {
+  ["2x1"] = {
+      {
+      icon = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay-2x1.png",
+      tint = { r=0, g=0, b=0, a=0.6 },
+      icon_size = 32
+    }
   },
-  ["item_blacklist"] = {},
-  ["primary_batteries"] = {
-    -- SchallPrimaryBattery
-    ["primary-battery-equipment-alkaline"] = true,
-    ["primary-battery-equipment-dry"] = true
+  ["1x1"] = {
+      {
+      icon = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay-1x1.png",
+      tint = { r=0, g=0, b=0, a=0.6 },
+      icon_size = 32
+    }
   },
-  ["vehicle_blacklist"] = {
-    -- these accept chemical fuel and have a non-zero fuel_inventory_size when we see them, but they're edited later
-    ["et-electric-locomotive-mk1"] = true,
-    ["et-electric-locomotive-mk2"] = true,
-    ["et-electric-locomotive-mk3"] = true,
-    -- These are used internally by Cargo Ships.
-    ["cargo_ship_engine"] = true,
-    ["boat_engine"] = true,
+  ["battery-equipment"] = {
+      {
+      icon = BatteryPack.GRAPHICS_DIRECTORY .. "battery-equipment.png",
+      tint = { r=0, g=0, b=0, a=1 },
+      icon_size = 64, icon_mipmaps = 4
+    }
+  },
+  ["battery-mk2-equipment"] = {
+      {
+      icon = BatteryPack.GRAPHICS_DIRECTORY .. "battery-mk2-equipment.png",
+      tint = { r=0, g=0, b=0, a=1 },
+      icon_size = 64, icon_mipmaps = 4
+    }
+  },
+  ["default"] = {
+      {
+      icon = BatteryPack.GRAPHICS_DIRECTORY .. "dark-overlay.png",
+      tint = { r=0, g=0, b=0, a=1 },
+      icon_size = 32
+    }
   }
 }
 
-for listName, listData in pairs(blacklist_data) do
-  local existingData = BatteryPack[listName]
-  if existingData then
-    for name in pairs(listData) do
-      existingData[name] = true
-    end
-  else
-    BatteryPack[listName] = listData
-  end
-end
+BatteryPack.equipment_blacklist = {
+  -- Not actually a battery.
+  ["heli-remote-equipment"] = true
+}
 
+BatteryPack.item_blacklist = {}
+
+BatteryPack.primary_batteries = {
+  -- SchallPrimaryBattery
+  ["primary-battery-equipment-alkaline"] = true,
+  ["primary-battery-equipment-dry"] = true
+}
+
+BatteryPack.vehicle_blacklist = {
+  -- these accept chemical fuel and have a non-zero fuel_inventory_size when we see them, but they're edited later
+  ["et-electric-locomotive-mk1"] = true,
+  ["et-electric-locomotive-mk2"] = true,
+  ["et-electric-locomotive-mk3"] = true,
+  -- These are used internally by Cargo Ships.
+  ["cargo_ship_engine"] = true,
+  ["boat_engine"] = true,
+  -- These need runtime support
+  ["vehicle-miner"] = true,
+  ["vehicle-miner-mk2"] = true,
+  ["vehicle-miner-mk3"] = true,
+  ["vehicle-miner-mk4"] = true,
+  ["vehicle-miner-mk5"] = true,
+}
+
+BatteryPack.sound_replacement = {
+  ["__base__/sound/train-engine.ogg"] = {
+    filename = "__base__/sound/substation.ogg",
+    volume = 0.5
+  },
+  ["__base__/sound/car-engine.ogg"] = {
+    filename = "__base__/sound/substation.ogg",
+    volume = 0.5
+  },
+  ["__base__/sound/fight/tank-engine.ogg"] = {
+    filename = "__base__/sound/substation.ogg",
+    volume = 0.5
+  },
+}
+
+BatteryPack.sound_blacklist = {
+  ["__base__/sound/car-engine-start.ogg"] = true,
+  ["__base__/sound/car-engine-stop.ogg"] = true,
+  ["__base__/sound/fight/car-no-fuel-1.ogg"] = true,
+  ["__base__/sound/fight/tank-engine-start.ogg"] = true,
+  ["__base__/sound/fight/tank-engine-stop.ogg"] = true,
+  ["__base__/sound/fight/tank-no-fuel-1.ogg"] = true
+}
 
 local intermediate_recipes = {}
-
 
 data:extend({
   {
@@ -79,13 +141,20 @@ table.insert(intermediate_recipes,battery_holder_name)
 table.insert(intermediate_recipes,battery_holder_contact_name)
 table.insert(intermediate_recipes,battery_holder_frame_name)
 
+--local battery_equipment = data.raw['battery-equipment']['battery-equipment']
+--BatteryPack.CHARGER_POWER = util.parse_energy(battery_equipment.energy_source.input_flow_limit)
+BatteryPack.CHARGER_POWER = 200000000 -- 200MW
+
+
+local battery_equipment_stack_size = data.raw.item['battery-equipment'].stack_size
+
 data:extend({
   {
     type = "item",
     name = battery_holder_name,
-    icon = BatteryPack.GRAPHICS_DIRECTORY .. "battery-holder.png",
-    icon_size = 32,
-    stack_size = 20,  -- battery-equipment stacks to 20
+    icon = BatteryPack.GRAPHICS_DIRECTORY .. "icons/battery-holder.png",
+    icon_size = 64,
+    stack_size = battery_equipment_stack_size,
     subgroup = "intermediate-product",
     order = "g[battery-holder]"
   },
@@ -124,8 +193,8 @@ data:extend({
   {
     type = "item",
     name = battery_holder_contact_name,
-    icon = BatteryPack.GRAPHICS_DIRECTORY .. "battery-contact.png",
-    icon_size = 32,
+    icon = BatteryPack.GRAPHICS_DIRECTORY .. "icons/battery-contact.png",
+    icon_size = 64,
     stack_size = 200, -- small fiddly thing.
     subgroup = "intermediate-product",
     order = "g[battery-holder-contact]"
@@ -155,9 +224,9 @@ data:extend({
   {
     type = "item",
     name = battery_holder_frame_name,
-    icon = BatteryPack.GRAPHICS_DIRECTORY .. "battery-holder-frame.png",
-    icon_size = 32,
-    stack_size = 20, -- battery-equipment stacks to 20
+    icon = BatteryPack.GRAPHICS_DIRECTORY .. "icons/battery-holder-frame.png",
+    icon_size = 64,
+    stack_size = battery_equipment_stack_size,
     subgroup = "intermediate-product",
     order = "g[battery-holder-frame]"
   },
@@ -187,8 +256,10 @@ data:extend({
 
 
 local accumulator = data.raw["accumulator"]["accumulator"]
+local accumulator_icons = icons_of(accumulator)
 
-BatteryPack.building_template = table.deepcopy(accumulator)
+
+local building_template = table.deepcopy(accumulator)
 
 local remove_properties = {
   "type",
@@ -205,32 +276,28 @@ local remove_properties = {
   "default_output_signal"
 }
 
-for i, key in ipairs(remove_properties) do
-  BatteryPack.building_template[key] = nil
+for _, key in ipairs(remove_properties) do
+  building_template[key] = nil
 end
-
-BatteryPack.minable = {
-  mining_time = 0.1,
-  result = nil
-}
 
 local charger_name = BatteryPack.PREFIX .. "charger"
 local discharger_name = BatteryPack.PREFIX .. "discharger"
 
-local charger = table.deepcopy(BatteryPack.building_template)
-local discharger = table.deepcopy(BatteryPack.building_template)
+local charger = table.deepcopy(building_template)
+local discharger = table.deepcopy(building_template)
 
 charger.type = "furnace"
 charger.name = charger_name
 charger.minable.result = charger_name
-charger.energy_usage = "200MW"
+charger.energy_usage = BatteryPack.CHARGER_POWER .. 'W'
 charger.crafting_speed = 1
 charger.crafting_categories = { BatteryPack.charging_recipe_category }
 charger.energy_source = {
   type = "electric",
   usage_priority = "tertiary",
-  output_flow_limit = "0.001W",
-  drain = "0W"
+  output_flow_limit = '0W',
+  input_flow_limit = BatteryPack.CHARGER_POWER .. 'W',
+  drain = '0W'
 }
 charger.result_inventory_size = 1
 charger.source_inventory_size = 1
@@ -242,11 +309,12 @@ charger.working_visualisations = {
   }
 }
 
+
+
 local charger_item = {
   type = "item",
   name = charger_name,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 64, icon_mipmaps = 4,
+  icons = accumulator_icons,
   place_result = charger_name,
   stack_size = 50,
   subgroup = "energy",
@@ -256,8 +324,7 @@ local charger_item = {
 local charger_recipe = {
   type = "recipe",
   name = charger_name,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 64, icon_mipmaps = 4,
+  icons = accumulator_icons,
   ingredients = {
     {
       type = "item",
@@ -292,7 +359,7 @@ discharger.minable.result = discharger_name
 discharger.energy_source = {
   type = "electric",
   usage_priority = "tertiary",
-  input_flow_limit = "0W"
+  input_flow_limit = '0W'
 }
 discharger.burner = {
   type = "burner",
@@ -305,15 +372,17 @@ discharger.burner = {
 discharger.animation = accumulator.discharge_animation
 discharger.idle_animation = accumulator_picture({ r=1, g=1, b=1, a=1 } , 24)
 discharger.effectivity = 1
-discharger.max_power_output = "200MW"
+discharger.max_power_output = BatteryPack.CHARGER_POWER .. 'W'
+
+local accumulator_icon = accumulator_icons[1]
 
 local discharger_equipment = {
   type = "generator-equipment",
   name = discharger_name,
   sprite = {
-    filename = "__base__/graphics/icons/accumulator.png",
-    height = 64,
-    width = 64,
+    filename = accumulator_icon.icon,
+    height = accumulator_icon.icon_size or 32,
+    width = accumulator_icon.icon_size or 32,
     priority = "medium"
   },
   shape = {
@@ -341,8 +410,7 @@ local discharger_item = {
   name = discharger_name,
   localised_name = discharger.localised_name,
   localised_description = discharger.localised_description,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 64, icon_mipmaps = 4,
+  icons = accumulator_icons,
   place_result = discharger_name,
   placed_as_equipment_result = discharger_name,
   stack_size = 50,
@@ -353,8 +421,7 @@ local discharger_item = {
 local discharger_recipe = {
   type = "recipe",
   name = discharger_name,
-  icon = "__base__/graphics/icons/accumulator.png",
-  icon_size = 64, icon_mipmaps = 4,
+  icons = accumulator_icons,
   ingredients = {
     {
       type = "item",
@@ -407,32 +474,162 @@ for _, module in pairs(data.raw["module"]) do
   ::next_module::
 end
 
--- recipe unlock
+local plastic_bar_technology = ORNodes.depend_on_item("plastic-bar")
 
-local battery_equipment_technology = data.raw["technology"]["battery-equipment"]
-local battery_equipment_technology_effects = battery_equipment_technology.effects
+local battery_holder_technology_name = BatteryPack.PREFIX .. 'battery-holder'
+BatteryPack.battery_charger_technology = BatteryPack.PREFIX .. 'battery-charger'
+BatteryPack.battery_power_plant = BatteryPack.PREFIX .. 'battery-power-plant'
+BatteryPack.battery_charging_technology = BatteryPack.PREFIX .. 'battery-charging'
+BatteryPack.power_inverter_technology = BatteryPack.PREFIX .. 'power-inverter'
+BatteryPack.electric_vehicle_technology = BatteryPack.PREFIX .. 'electric-vehicles'
 
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = battery_holder_contact_name
-})
+local accumulator_technology = data.raw.technology["electric-energy-accumulators"]
 
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = battery_holder_frame_name
-})
+do
+  local accumulator_normal = accumulator_technology.normal
+  local accumulator_expensive = accumulator_technology.expensive
 
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = battery_holder_name
-})
+  if accumulator_normal or accumulator_expensive then
+    if accumulator_normal then
+      accumulator_normal.unit.count = accumulator_normal.unit.count / 3
+    end
+    if accumulator_expensive then
+      accumulator_expensive.unit.count = accumulator_expensive.unit.count / 3
+    end
+  else
+    accumulator_technology.unit.count = accumulator_technology.unit.count / 3
+  end
+end
 
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = charger_name
-})
+local accumulator_technology_icons = icons_of(accumulator_technology, true)
 
-table.insert(battery_equipment_technology_effects, {
-  type = "unlock-recipe",
-  recipe = discharger_name
-})
+local battery_charging_technology = table.deepcopy(accumulator_technology)
+
+battery_charging_technology.name = BatteryPack.battery_charging_technology
+battery_charging_technology.effects = nil
+battery_charging_technology.localised_name = nil
+
+local power_inverter_technology = table.deepcopy(accumulator_technology)
+power_inverter_technology.name = BatteryPack.power_inverter_technology
+power_inverter_technology.effects = nil
+power_inverter_technology.localised_name = nil
+
+accumulator_technology.prerequisites = {
+  BatteryPack.battery_charging_technology,
+  BatteryPack.power_inverter_technology
+}
+data:extend{power_inverter_technology}
+data:extend{battery_charging_technology}
+data:extend{accumulator_technology}
+
+data:extend{
+  {
+    type = "technology",
+    name = battery_holder_technology_name,
+    icons = {
+      {
+        icon = BatteryPack.GRAPHICS_DIRECTORY .. 'technology/battery-holder.png',
+        icon_size = 128
+      }
+    },
+    unit = {
+      count = 5,
+      ingredients = {
+        {"automation-science-pack", 1},
+        {"logistic-science-pack", 1},
+      },
+      time = 15
+    },
+    effects = {
+      {
+        type = "unlock-recipe",
+        recipe = battery_holder_contact_name
+      },
+      {
+        type = "unlock-recipe",
+        recipe = battery_holder_frame_name
+      },
+      {
+        type = "unlock-recipe",
+        recipe = battery_holder_name
+      }
+    },
+    prerequisites = {
+      "battery",
+      plastic_bar_technology[1]
+    }
+  },
+  {
+    type = "technology",
+    name = BatteryPack.battery_charger_technology,
+    icons = accumulator_technology_icons,
+    unit = {
+      count = 5,
+      ingredients = {
+        {"automation-science-pack", 1},
+        {"logistic-science-pack", 1},
+      },
+      time = 15
+    },
+    effects = {
+      {
+        type = "unlock-recipe",
+        recipe = charger_name
+      }
+    },
+    prerequisites = {
+      battery_holder_technology_name,
+      BatteryPack.battery_charging_technology,
+      -- depends on first unlocked battery equipment (added in data-update)
+    }
+  },
+  {
+    type = "technology",
+    name = BatteryPack.battery_power_plant,
+    icons = accumulator_technology_icons,
+    unit = {
+      count = 5,
+      ingredients = {
+        {"automation-science-pack", 1},
+        {"logistic-science-pack", 1},
+      },
+      time = 15
+    },
+    effects = {
+      {
+        type = "unlock-recipe",
+        recipe = discharger_name
+      }
+    },
+    prerequisites = {
+      battery_holder_technology_name,
+      BatteryPack.power_inverter_technology,
+      -- depends on first unlocked battery equipment (added in data-update)
+    }
+  },
+  {
+    type = "technology",
+    name = BatteryPack.electric_vehicle_technology,
+    icons = {
+      {
+        --icon = BatteryPack.GRAPHICS_DIRECTORY .. 'technology/electric_vehicles.png',
+        icon = BatteryPack.GRAPHICS_DIRECTORY .. 'technology/battery-holder.png',
+        icon_size = 128
+      }
+    },
+    unit = {
+      count = 5,
+      ingredients = {
+        {"automation-science-pack", 1},
+        {"logistic-science-pack", 1},
+      },
+      time = 15
+    },
+    prerequisites = {
+      battery_holder_technology_name,
+      BatteryPack.power_inverter_technology,
+      "electric-engine",
+      -- depends on first unlocked vehicle (added in data-update)
+    }
+  }
+}

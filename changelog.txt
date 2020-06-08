@@ -1,11 +1,27 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.10
+Date: 202-06-08
+
+  Changes:
+    - Some actual research to unlock things.
+    - Recipes to convert battery-powered vehicles to their original versions.
+    - Sort battery-powered vehicles after their vanilla counterparts.
+  Sounds:
+    - Use substation sound for engine noise for battery-powered vehicles instead of complete silence.
+  Graphics:
+    - Added icon overlay that matches new battery graphics.
+    - Added icon overlay to battery-powered vehicles.
+    - New improved icons.
+  Bugfixes:
+    - No longer creates battery-powered AAI miners.
+
+---------------------------------------------------------------------------------------------------
 Version: 0.0.9
 Date: 24. 05. 2020
 
   Changes:
     - Updated for Factorio v0.18
     - Removed the secondary-input battery charger, as it is no longer necessary.
-
   Bugfixes:
     - No longer creates battery-powered boat/ship engines from the Cargo ships mod.
     - No longer creates a charged helicoper remote control.
