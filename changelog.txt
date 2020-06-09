@@ -1,6 +1,14 @@
 ---------------------------------------------------------------------------------------------------
+Version: 0.0.11
+Date: 2020-06-10
+
+  Bugfixes:
+    - Don't assume that a burner must specify fuel_category or fuel_categories.
+    - Fix changelog entry.
+
+---------------------------------------------------------------------------------------------------
 Version: 0.0.10
-Date: 202-06-08
+Date: 2020-06-08
 
   Changes:
     - Some actual research to unlock things.

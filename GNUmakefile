@@ -57,11 +57,10 @@ $(TARGET_DIRS):
 
 .PHONY: package-copy
 package-copy: directories $(TARGET_FILES)
-	echo $(LUA_FILES)
 
 .PHONY: package
 package: package-copy
-	cd build && $(ZIP) $(OUTPUT_NAME).zip $(OUTPUT_NAME)
+	cd build && $(ZIP) -9 $(OUTPUT_NAME).zip $(OUTPUT_NAME)
 
 .PHONY: clean
 clean:

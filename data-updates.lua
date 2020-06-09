@@ -228,14 +228,16 @@ function BatteryPack.process_vehicle(old_vehicle, new_things, processed_items)
     if fuel_category ~= 'chemical' then return end
   else
     local fuel_categories = burner.fuel_categories
-    local has_chemical = false
-    for _, fuel_category in pairs(fuel_categories) do -- luacheck: ignore
-      if fuel_category == BatteryPack.fuel_category then return end
-      if fuel_category == 'chemical' then
-        has_chemical = true
+    if fuel_categories then
+      local has_chemical = false
+      for _, fuel_category in pairs(fuel_categories) do -- luacheck: ignore
+        if fuel_category == BatteryPack.fuel_category then return end
+        if fuel_category == 'chemical' then
+          has_chemical = true
+        end
       end
+      if not has_chemical then return end
     end
-    if not has_chemical then return end
   end
 
   ---------------------------------------------------------------
